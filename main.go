@@ -34,11 +34,11 @@ type ClientManager struct {
 var manager = ClientManager{ rooms: make(map[string]map[*websocket.Conn]bool) }
 
 func initRedis() {
-	// Look for a cloud URL first
-	redisUrl := os.Getenv("redis-cli --tls -u redis://default:AbjPAAIncDJlOWJmZTgzMWRiZmI0NGM1OGM1MDEyNmY4ZWYxZDVlNnAyNDczMTE@elegant-mallard-47311.upstash.io:6379")
+	// Look for the environment variable KEY, not the value!
+	redisUrl := os.Getenv("REDIS_URL")
 	
 	if redisUrl != "" {
-		// Connect to the secure cloud database (Upstash)
+		// Connect to the secure cloud database
 		opt, err := redis.ParseURL(redisUrl)
 		if err != nil { log.Fatal("Invalid Redis URL:", err) }
 		rdb = redis.NewClient(opt)
