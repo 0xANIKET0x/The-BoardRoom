@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANIKET WB ULTIMATE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root { 
+            --bg-dark: #0f172a; --panel-dark: rgba(30, 41, 59, 0.98); 
+            --text-light: #f8fafc; --accent: #3b82f6; --accent-glow: #60a5fa;
+            --danger: #ef4444; --border: 1px solid rgba(255,255,255,0.1);
+        }
+        [data-theme="light"] { 
+            --bg-dark: #f1f5f9; --panel-dark: rgba(255,255,255,0.98); 
+            --text-light: #1e293b; --border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        body { margin: 0; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; background: var(--bg-dark); color: var(--text-light); display: flex; transition: 0.3s; }
+        
+        #cursor-ghost {
+            position: fixed; pointer-events: none; z-index: 9999;
+            border: 2px solid var(--accent); border-radius: 50%;
+            transform: translate(-50%, -50%); display: none;
+            mix-blend-mode: difference; will-change: top, left;
+        }
+
+        #toolbar { 
+            width: 90px; padding: 20px 0; background: var(--panel-dark); border-right: var(--border); 
+            display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 50; 
+            backdrop-filter: blur(10px); overflow: visible; 
+        }
+        .tool-header { font-size: 9px; font-weight: 800; color: #64748b; margin-top:10px; width:100%; text-align:center; letter-spacing:1px; }
+        
+        .tool-btn { 
+            width: 45px; height: 45px; border-radius: 12px; border: var(--border); 
+            background: rgba(255,255,255,0.05); color: var(--text-light); font-size: 20px; 
+            cursor: pointer; transition: transform 0.1s, background 0.2s; display: flex; justify-content: center; align-items: center; position: relative;
+        }
+        .tool-btn:hover { background: var(--accent); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+        .tool-btn.active { background: var(--accent); color: white; border-color: var(--accent-glow); box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+        .tool-name { font-size: 9px; color: #94a3b8; margin-bottom: 5px; }
+
+        .dropdown { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        .dropdown-content { 
+            display: none; position: absolute; left: 75px; top: -10px; 
+            background: var(--panel-dark); padding: 5px; border-radius: 8px; border: var(--border);
+            width: 140px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 100;
+        }
+        .dropdown-content.show { display: block; }
+        .dropdown-item { padding: 10px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-light); }
+        .dropdown-item:hover { background: var(--accent); color: white; }
+
+        #main { 
+            flex-grow: 1; position: relative; overflow: auto; 
+            background: #64748b; display: flex; justify-content: center; align-items: flex-start; padding: 50px;
+        }
+        .stack { 
+            position: relative; width: 2000px; height: 2000px; 
+            background: white; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border-radius: 4px; 
+        }
+        canvas { position: absolute; top: 0; left: 0; }
+        #real { z-index: 1; }
+        #temp { z-index: 2; pointer-events: auto; cursor: crosshair; }
+        
+        #props { 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--panel-dark); padding: 8px 25px; border-radius: 50px; 
+            display: flex; align-items: center; gap: 15px; border: var(--border); z-index: 60; backdrop-filter: blur(10px);
+        }
+        
+        #chat-wrapper { display: flex; height: 100%; z-index: 50; }
+        #toggle-btn {
+            width: 24px; display: flex; align-items: center; justify-content: center;
+            background: var(--panel-dark); border-left: var(--border); border-bottom: var(--border);
+            border-radius: 0 0 0 10px; cursor: pointer; height: 60px; align-self: center;
+        }
+        #chat { 
+            width: 320px; background: var(--panel-dark); border-left: var(--border); 
+            display: flex; flex-direction: column; transition: width 0.3s ease; overflow: hidden;
+        }
+        #chat.collapsed { width: 0; border: none; }
+        #chat-header { padding: 20px; font-weight: 800; border-bottom: var(--border); background: rgba(0,0,0,0.2); }
+        #msgs { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .m { padding: 10px 14px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 13px; line-height: 1.4; }
+        .m b { color: var(--accent-glow); }
+        #c_in { width: 90%; margin: 10px auto; padding: 12px; background: rgba(0,0,0,0.3); border: var(--border); color: white; border-radius: 8px; outline: none; }
+
+        #login-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(10px); }
+        .login-card { background: var(--panel-dark); padding: 40px; border-radius: 24px; width: 350px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
+        .input-group { text-align: left; margin-bottom: 15px; }
+        .input-label { font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 5px; display: block; }
+        .login-input { width: 90%; padding: 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; outline: none; }
+        .btn-primary { width: 100%; padding: 14px; background: linear-gradient(90deg, var(--accent), #2563eb); border: none; color: white; border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+        
+        .admin-toggle { margin-top: 20px; font-size: 12px; color: #64748b; cursor: pointer; text-decoration: underline; }
+        #admin-panel { display: none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 20px; }
+        .room-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #0f172a; margin-bottom: 5px; border-radius: 6px; font-size: 13px; }
+        .btn-danger { background: var(--danger); padding: 5px 10px; border-radius: 4px; color: white; border: none; cursor: pointer; font-size: 11px; font-weight: bold; }
+
+        .floating-text-input { position: absolute; background: rgba(255,255,255,0.9); border: 2px dashed #3b82f6; outline: none; padding: 0; margin: 0; overflow: hidden; z-index: 1000; line-height: 1.2; white-space: pre; min-width: 50px; font-family: Arial; box-shadow: 0 4px 10px rgba(0,0,0,0.3); color: black; }
+    </style>
+</head>
+<body data-theme="dark">
+
+    <div id="cursor-ghost"></div>
+
+    <div id="login-overlay">
+        <div class="login-card">
+            <h2 style="margin-top:0">ANIKET WB</h2>
+            <div id="user-view">
+                <div class="input-group">
+                    <label class="input-label">DISPLAY NAME</label>
+                    <input id="u_name" class="login-input" placeholder="Name" value="Designer">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">ROOM ID</label>
+                    <input id="u_room" class="login-input" placeholder="Room" value="Lobby">
+                </div>
+                <button onclick="join()" class="btn-primary">ENTER STUDIO</button>
+                <div class="admin-toggle" onclick="showAdmin()">Switch to Admin</div>
+            </div>
+            <div id="admin-panel">
+                <h4 style="margin:0 0 10px 0; color:white;">ACTIVE SESSIONS</h4>
+                <div id="room-list"></div>
+                <button onclick="refreshRooms()" style="margin-top:10px; background:none; border:none; color:#aaa; cursor:pointer;">Refresh List</button>
+                <div class="admin-toggle" onclick="showUser()">Back to Login</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toolbar">
+        <div class="tool-header">BASIC</div>
+        <button class="tool-btn active" onclick="setTool('pencil')" title="Pencil">✏️</button><span class="tool-name">Pencil</span>
+        <button class="tool-btn" onclick="setTool('eraser')" title="Eraser">🧼</button><span class="tool-name">Eraser</span>
+        <button class="tool-btn" onclick="setTool('fill')" title="Smart Fill">🪣</button><span class="tool-name">Fill</span>
+        <button class="tool-btn" onclick="setTool('text')" title="Text Box">T</button><span class="tool-name">Text</span>
+        
+        <div class="tool-header">TOOLS</div>
+        <button class="tool-btn" onclick="setTool('select')" title="Cut & Move">✂️</button><span class="tool-name">Move</span>
+        <div class="dropdown">
+            <button class="tool-btn" onclick="toggleMenu('shape-menu', event)" title="Shapes">🔷</button><span class="tool-name">Shapes</span>
+            <div id="shape-menu" class="dropdown-content">
+                <div class="dropdown-item" onclick="setTool('rect')">⬜ Rectangle</div>
+                <div class="dropdown-item" onclick="setTool('circle')">⭕ Circle</div>
+                <div class="dropdown-item" onclick="setTool('arrow')">↗️ Arrow</div>
+                <div class="dropdown-item" onclick="setTool('star')">⭐ Star</div>
+                <div class="dropdown-item" onclick="setTool('line')">📏 Line</div>
+            </div>
+        </div>
+
+        <div class="tool-header">ACTIONS</div>
+        <button class="tool-btn" onclick="resizeBoard()" title="Resize">📐</button><span class="tool-name">Resize</span>
+        <button class="tool-btn" onclick="undo()" style="color:#fbbf24" title="Undo">↩️</button><span class="tool-name">Undo</span>
+        <button class="tool-btn" onclick="clearB()" style="color:#ef4444" title="Clear">🗑️</button><span class="tool-name">Clear</span>
+        <button class="tool-btn" onclick="savePDF()" style="color:#10b981" title="PDF">📄</button><span class="tool-name">Save</span>
+    </div>
+
+    <div id="props">
+        <input type="color" id="col" value="#000000" style="width:40px; height:40px; border:none; background:none; cursor:pointer;" onchange="updateCursor()">
+        <input type="range" id="sz" min="1" max="50" value="3" style="width:100px;" oninput="updateCursor()">
+        <span id="sz-val" style="font-size:11px; font-weight:800; color:white; width:35px; text-align:center;">3px</span>
+        <div style="width:1px; height:20px; background:rgba(255,255,255,0.2); margin:0 10px;"></div>
+        <span id="st" style="font-size:10px; color:#aaa; font-weight:bold;">PENCIL</span>
+    </div>
+
+    <div id="main">
+        <div class="stack" id="stack">
+            <canvas id="real"></canvas>
+            <canvas id="temp"></canvas>
+        </div>
+    </div>
+
+    <div id="chat-wrapper">
+        <div id="toggle-btn" onclick="toggleChat()">></div>
+        <div id="chat">
+            <div id="chat-header">💬 TEAM CHAT</div>
+            <div id="msgs"></div>
+            <input id="c_in" placeholder="Type a message..." onkeydown="handleChatKey(event)">
+        </div>
+    </div>
+
+    <script>
+        const dpr = window.devicePixelRatio || 1;
+        let W = 2000, H = 2000;
+        
+        // UNIQUE CLIENT ID: Defeats the double-line echo from the server
+        const myClientId = Math.random().toString(36).substring(2, 15);
+        
+        function setup(id) {
+            const c = document.getElementById(id);
+            c.width = W * dpr; c.height = H * dpr;
+            c.style.width = W + 'px'; c.style.height = H + 'px';
+            const x = c.getContext('2d', { willReadFrequently: true });
+            x.scale(dpr, dpr); return x;
+        }
+
+        let ctx = setup('real');
+        let tmp = setup('temp');
+        const tc = document.getElementById('temp');
+        const cursor = document.getElementById('cursor-ghost');
+        
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, W, H);
+        
+        let ws, tool = 'pencil', down = false;
+        let sx, sy, clip = null, sel = null;
+
+        document.addEventListener('mousemove', e => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        function updateCursor() {
+            const sz = document.getElementById('sz').value;
+            const col = document.getElementById('col').value;
+            document.getElementById('sz-val').innerText = sz + 'px';
+            cursor.style.width = sz + 'px'; cursor.style.height = sz + 'px';
+            
+            if(['pencil','eraser','rect','circle','star','arrow','line'].includes(tool)) {
+                cursor.style.display = 'block';
+                if(tool === 'eraser') {
+                    cursor.style.borderColor = '#000';
+                    cursor.style.backgroundColor = 'rgba(255,255,255,0.5)';
+                } else {
+                    cursor.style.borderColor = col;
+                    cursor.style.backgroundColor = 'transparent';
+                }
+            } else {
+                cursor.style.display = 'none';
+            }
+        }
+
+        function join() {
+    document.getElementById('login-overlay').style.display = 'none';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws?room=${document.getElementById('u_room').value}&user=${document.getElementById('u_name').value}`);
+    ws.onmessage = e => parse(e.data);
+    updateCursor();
+		}
+
+        function showAdmin() { 
+            const p = prompt("Enter Admin Password:");
+            if(p === "@123@") {
+                document.getElementById('user-view').style.display='none'; 
+                document.getElementById('admin-panel').style.display='block'; 
+                refreshRooms(); 
+            } else { alert("Access Denied"); }
+        }
+        function showUser() { document.getElementById('user-view').style.display='block'; document.getElementById('admin-panel').style.display='none'; }
+        async function refreshRooms() {
+            const res = await fetch('/admin/rooms'); const rooms = await res.json();
+            const div = document.getElementById('room-list'); div.innerHTML = '';
+            rooms.forEach(r => div.innerHTML += `<div class="room-item"><span>${r}</span> <button class="btn-danger" onclick="destroy('${r}')">NUKE</button></div>`);
+        }
+        async function destroy(r) { await fetch('/admin/destroy?room='+r); refreshRooms(); }
+
+        // --- NEW: Universal JSON unwrapper to defeat Redis/Websocket serialization bugs ---
+        function safeJSONParse(data) {
+            let parsed = data;
+            if (typeof parsed !== 'string') return parsed;
+            try {
+                let temp = JSON.parse(parsed);
+                // If it was double-stringified (common with json.RawMessage), unwrap it again
+                if (typeof temp === 'string') temp = JSON.parse(temp);
+                return temp;
+            } catch (e) {
+                return parsed; // Fallback to raw data if parsing ultimately fails
+            }
+        }
+
+        // --- BULLETPROOF PARSER ---
+        function parse(raw) {
+            try {
+                let m = safeJSONParse(raw);
+                if (!m || typeof m !== 'object') return; // Exit if invalid payload
+
+                if(m.type === 'history_load' || m.type === 'refresh') {
+                    // Absolute Wipe Before History Load
+                    ctx.clearRect(0,0,W,H);
+                    ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,W,H);
+                    tmp.clearRect(0,0,W,H); 
+                    document.getElementById('msgs').innerHTML = ''; 
+                    
+                    let list = safeJSONParse(m.payload);
+                    if(Array.isArray(list)) {
+                        list.forEach(item => {
+                            let obj = safeJSONParse(item);
+                            processMsg(obj, true);
+                        });
+                    }
+                } else {
+                    processMsg(m, false);
+                }
+            } catch(e) { console.error("Parse Error:", e); }
+        }
+
+        function processMsg(m, isHistory) {
+            if (!m || !m.type) return;
+            // Force extraction of payload to fix Chat, Double Lines, and Clear actions
+            let p = safeJSONParse(m.payload) || {}; 
+
+            if(m.type === 'draw') {
+                // If it's a live drawing echo from the server with our ID, drop it to prevent double-thick lines
+                if(!isHistory && p.clientId === myClientId) return;
+
+                if(p.tool === 'paste_image') {
+                    const img = new Image();
+                    img.onload = () => ctx.drawImage(img, p.x, p.y, img.width/dpr, img.height/dpr);
+                    img.src = p.image;
+                } else if(p.tool === 'clear_rect') {
+                    ctx.fillStyle = "#ffffff"; ctx.fillRect(p.x, p.y, p.w, p.h);
+                } else if(p.tool === 'resize') {
+                    performResize(p.w, p.h, false);
+                } else {
+                    draw(ctx, p);
+                }
+            } else if(m.type === 'chat') {
+                // Safely extract text now that serialization is fixed
+                const d = document.createElement('div'); d.className = 'm';
+                const text = p.text || "";
+                const user = m.username || "Anon";
+                d.innerHTML = `<b>${user}:</b> ${text}`;
+                const msgsBox = document.getElementById('msgs');
+                msgsBox.appendChild(d);
+                msgsBox.scrollTop = msgsBox.scrollHeight;
+            } else if(m.type === 'clear') {
+                // Wipe both the permanent and temporary drawing layers
+                ctx.clearRect(0,0,W,H);
+                ctx.fillStyle = "#ffffff"; 
+                ctx.fillRect(0,0,W,H);
+                tmp.clearRect(0,0,W,H); 
+                document.getElementById('msgs').innerHTML = ''; 
+            }
+        }
+
+        tc.addEventListener('mousedown', e => {
+            down = true; sx = e.offsetX; sy = e.offsetY;
+            
+            if(tool === 'text') {
+                if(document.querySelector('.floating-text-input')) return;
+                const t = document.createElement('textarea');
+                t.className = 'floating-text-input';
+                const color = document.getElementById('col').value;
+                const size = parseInt(document.getElementById('sz').value) * 3 + 10;
+                
+                t.style.left = sx + 'px'; t.style.top = sy + 'px';
+                t.style.fontSize = size + 'px'; t.style.color = color;
+                
+                document.getElementById('stack').appendChild(t);
+                setTimeout(() => t.focus(), 10);
+                
+                const commit = () => {
+                    if(t.value.trim() !== "") {
+                        const p = { tool: 'text', text: t.value, x: sx, y: sy + size * 0.8, color: color, size: size };
+                        draw(ctx, p); send(p);
+                    }
+                    if(t.parentNode) t.remove();
+                };
+
+                t.addEventListener('keydown', (evt) => { 
+                    if(evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); commit(); } 
+                    if(evt.key === 'Escape') { if(t.parentNode) t.remove(); }
+                });
+                t.addEventListener('blur', commit);
+                down = false; return;
+            }
+
+            if(tool === 'fill') { 
+                document.getElementById('st').innerText="FILLING...";
+                setTimeout(() => {
+                    const c = document.getElementById('col').value; 
+                    fill(sx, sy, c); 
+                    send({tool:'fill',x:sx,y:sy,color:c}); 
+                    document.getElementById('st').innerText="FILL DONE";
+                }, 10);
+                down=false; return;
+            }
+
+            if(tool === 'select') {
+                if(clip) {
+                    const hC = document.createElement('canvas');
+                    hC.width = clip.width; hC.height = clip.height;
+                    hC.getContext('2d').putImageData(clip, 0, 0);
+                    const b64 = hC.toDataURL();
+                    ctx.drawImage(hC, 0, 0, clip.width, clip.height, sx, sy, clip.width/dpr, clip.height/dpr);
+                    send({tool:'clear_rect', x:sel.x, y:sel.y, w:sel.w, h:sel.h});
+                    send({tool:'paste_image', image:b64, x:sx, y:sy});
+                    tmp.clearRect(0,0,W,H); clip=null; sel=null;
+                    document.getElementById('st').innerText = "MOVED";
+                    down = false;
+                }
+                return;
+            }
+        });
+
+        let lastMove = 0;
+        tc.addEventListener('mousemove', e => {
+            const now = Date.now();
+            if(now - lastMove < 16) return; 
+            lastMove = now;
+            
+            const mx = e.offsetX, my = e.offsetY;
+            if(tool === 'select') {
+                tmp.clearRect(0,0,W,H);
+                if(clip) { tmp.putImageData(clip, mx*dpr, my*dpr); } 
+                else if(down) { tmp.setLineDash([5,5]); tmp.strokeStyle='#000'; tmp.strokeRect(sx,sy,mx-sx,my-sy); tmp.setLineDash([]); }
+                return;
+            }
+            if(!down) return;
+            
+            const c = document.getElementById('col').value, s = document.getElementById('sz').value;
+            tmp.clearRect(0,0,W,H);
+            
+            if(tool==='pencil'||tool==='eraser') {
+                const col = tool==='eraser'?'#ffffff':c;
+                draw(ctx, {tool, x0:sx, y0:sy, x1:mx, y1:my, color:col, size:s});
+                send({tool, x0:sx, y0:sy, x1:mx, y1:my, color:col, size:s});
+                sx=mx; sy=my;
+            } else {
+                draw(tmp, {tool, x0:sx, y0:sy, x1:mx, y1:my, color:c, size:s});
+            }
+        });
+
+        tc.addEventListener('mouseup', e => {
+            if(tool === 'select') {
+                if(clip) return; 
+                down = false;
+                const w = e.offsetX - sx, h = e.offsetY - sy;
+                if(Math.abs(w)>5 && Math.abs(h)>5) {
+                    sel = {x:sx, y:sy, w, h};
+                    clip = ctx.getImageData(sx*dpr, sy*dpr, w*dpr, h*dpr);
+                    ctx.fillStyle="#ffffff"; ctx.fillRect(sx, sy, w, h); 
+                    document.getElementById('st').innerText = "CLICK TO DROP";
+                }
+                return;
+            }
+            if(!down) return; down=false;
+            const mx=e.offsetX, my=e.offsetY;
+            const c = document.getElementById('col').value, s = document.getElementById('sz').value;
+            tmp.clearRect(0,0,W,H);
+            
+            if(tool!=='pencil'&&tool!=='eraser'&&tool!=='fill') {
+                const p = {tool, x0:sx, y0:sy, x1:mx, y1:my, color:c, size:s};
+                draw(ctx, p); send(p);
+            }
+        });
+
+        document.addEventListener('keydown', e => { 
+            if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); undo(); } 
+        });
+
+        function draw(c, p) {
+            c.beginPath();
+            c.strokeStyle = p.color; 
+            c.lineWidth = p.size; 
+            c.lineCap = 'round';
+            c.lineJoin = 'round';
+            
+            if(p.tool==='pencil'||p.tool==='eraser'||p.tool==='line') { c.moveTo(p.x0, p.y0); c.lineTo(p.x1, p.y1); c.stroke(); }
+            else if(p.tool==='rect') { c.rect(p.x0, p.y0, p.x1-p.x0, p.y1-p.y0); c.stroke(); }
+            else if(p.tool==='circle') { c.arc(p.x0, p.y0, Math.hypot(p.x1-p.x0, p.y1-p.y0), 0, Math.PI*2); c.stroke(); }
+            else if(p.tool==='triangle') { c.moveTo(p.x0, p.y0); c.lineTo(p.x1, p.y1); c.lineTo(p.x0-(p.x1-p.x0), p.y1); c.closePath(); c.stroke(); }
+            else if(p.tool==='arrow') {
+                const h=p.size*4, a=Math.atan2(p.y1-p.y0, p.x1-p.x0);
+                c.moveTo(p.x0,p.y0); c.lineTo(p.x1,p.y1);
+                c.moveTo(p.x1,p.y1); c.lineTo(p.x1-h*Math.cos(a-Math.PI/6), p.y1-h*Math.sin(a-Math.PI/6));
+                c.moveTo(p.x1,p.y1); c.lineTo(p.x1-h*Math.cos(a+Math.PI/6), p.y1-h*Math.sin(a+Math.PI/6));
+                c.stroke();
+            } else if(p.tool==='star') {
+                let rot=Math.PI/2*3, x=p.x0, y=p.y0, step=Math.PI/5, r=Math.hypot(p.x1-p.x0, p.y1-p.y0);
+                c.beginPath(); c.moveTo(p.x0,p.y0-r);
+                for(let i=0;i<5;i++){ x=p.x0+Math.cos(rot)*r; y=p.y0+Math.sin(rot)*r; c.lineTo(x,y); rot+=step; x=p.x0+Math.cos(rot)*(r/2); y=p.y0+Math.sin(rot)*(r/2); c.lineTo(x,y); rot+=step; }
+                c.closePath(); c.stroke();
+            } else if(p.tool==='text') { 
+                c.fillStyle=p.color; 
+                c.font=p.size+'px Arial'; 
+                const lines = p.text.split('\n');
+                const lineHeight = p.size * 1.2;
+                lines.forEach((line, i) => c.fillText(line, p.x, p.y + (i * lineHeight)));
+            }
+            else if(p.tool==='fill') { fill(p.x, p.y, p.color); }
+        }
+
+        function fill(sx, sy, hex) {
+            const w = ctx.canvas.width; 
+            const h = ctx.canvas.height;
+            const imgData = ctx.getImageData(0,0,w,h);
+            const buf32 = new Uint32Array(imgData.data.buffer); 
+            
+            const rF=parseInt(hex.slice(1,3),16), gF=parseInt(hex.slice(3,5),16), bF=parseInt(hex.slice(5,7),16);
+            const targetColor = (255 << 24) | (bF << 16) | (gF << 8) | rF;
+
+            const pX = (sx * dpr) | 0;
+            const pY = (sy * dpr) | 0;
+            if(pX<0 || pX>=w || pY<0 || pY>=h) return;
+
+            const startPos = (pY * w + pX) * 4;
+            const rT=imgData.data[startPos], gT=imgData.data[startPos+1], bT=imgData.data[startPos+2];
+            
+            if(Math.abs(rT-rF)+Math.abs(gT-gF)+Math.abs(bT-bF) < 10) return;
+
+            const stack = [pX, pY];
+            while(stack.length) {
+                const y = stack.pop();
+                const x = stack.pop();
+                const i32 = (y * w + x); 
+                const i8 = i32 * 4;      
+                
+                if(x<0 || x>=w || y<0 || y>=h) continue;
+                if(buf32[i32] === targetColor) continue; 
+
+                const cr=imgData.data[i8], cg=imgData.data[i8+1], cb=imgData.data[i8+2];
+                if(Math.abs(cr-rT)+Math.abs(cg-gT)+Math.abs(cb-bT) < 180) {
+                    buf32[i32] = targetColor; 
+                    stack.push(x+1, y, x-1, y, x, y+1, x, y-1);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0); 
+        }
+
+        function resizeBoard() {
+            const nw = prompt("Enter Width (px):", W);
+            const nh = prompt("Enter Height (px):", H);
+            if(nw && nh) {
+                send({tool:'resize', w:parseInt(nw), h:parseInt(nh)});
+                performResize(parseInt(nw), parseInt(nh), true);
+            }
+        }
+
+        function performResize(nw, nh, saveOld) {
+            let oldImg = null;
+            if(saveOld) oldImg = ctx.getImageData(0,0,W*dpr,H*dpr);
+            W = nw; H = nh;
+            
+            [document.getElementById('real'), document.getElementById('temp')].forEach(c => {
+                c.width = W * dpr; c.height = H * dpr;
+                c.style.width = W + 'px'; c.style.height = H + 'px';
+            });
+            document.getElementById('stack').style.width = W+'px'; 
+            document.getElementById('stack').style.height = H+'px';
+            
+            ctx = document.getElementById('real').getContext('2d',{willReadFrequently:true}); ctx.scale(dpr,dpr);
+            tmp = document.getElementById('temp').getContext('2d',{willReadFrequently:true}); tmp.scale(dpr,dpr);
+            ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,W,H);
+            if(saveOld && oldImg) ctx.putImageData(oldImg, 0, 0);
+        }
+
+        function toggleMenu(id, e) {
+            e.stopPropagation();
+            document.querySelectorAll('.dropdown-content').forEach(d => { if(d.id!==id) d.classList.remove('show'); });
+            document.getElementById(id).classList.toggle('show');
+        }
+
+        window.onclick = e => { if(!e.target.matches('.tool-btn')) document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show')); }
+
+        function setTool(t) { 
+            tool = t; document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); 
+            if(!['rect','circle','line','arrow','star','triangle'].includes(t)) {
+                event.currentTarget.classList.add('active'); 
+            }
+            document.getElementById('st').innerText=tool.toUpperCase();
+            if(clip) { ctx.putImageData(clip, sel.x*dpr, sel.y*dpr); clip=null; } 
+            updateCursor();
+        }
+
+        // --- FIXED SENDER ---
+        function send(p) { 
+            p.clientId = myClientId; 
+            if(ws && ws.readyState === 1) ws.send(JSON.stringify({type:'draw', payload:p})); 
+        }
+        function handleChatKey(e) {
+            if (e.key === 'Enter') sendC();
+        }
+        function sendC() { 
+            const input = document.getElementById('c_in');
+            if(input.value.trim() !== ""){ 
+                ws.send(JSON.stringify({type:'chat', payload:{text:input.value.trim()}})); 
+                input.value=''; 
+            }
+        }
+        function undo() { ws.send(JSON.stringify({type:'undo', payload:{}})); }
+        function clearB() { 
+            if(confirm('Clear the entire board?')) ws.send(JSON.stringify({type:'clear', payload:{}})); 
+        }
+        function toggleChat() { document.getElementById('toggle-btn').innerText = document.getElementById('chat').classList.toggle('collapsed') ? '<' : '>'; }
+        
+        function savePDF() {
+            const { jsPDF } = window.jspdf; const pdf = new jsPDF('l', 'px', [W, H]);
+            const c=document.createElement('canvas'); c.width=W; c.height=H;
+            const cx=c.getContext('2d'); cx.fillStyle='#ffffff'; cx.fillRect(0,0,W,H);
+            cx.drawImage(document.getElementById('real'),0,0,W,H);
+            pdf.addImage(c.toDataURL("image/jpeg", 1.0), 'JPEG', 0, 0, W, H);
+            pdf.save("whiteboard.pdf");
+        }
+    </script>
+</body>
+</html>
