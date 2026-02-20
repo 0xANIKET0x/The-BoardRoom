@@ -34,15 +34,21 @@ type ClientManager struct {
 var manager = ClientManager{ rooms: make(map[string]map[*websocket.Conn]bool) }
 
 func initRedis() {
-	// Look for Docker environment variable, fallback to localhost if running directly
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
+	// Look for a cloud URL first
+	redisUrl := os.Getenv("redis-cli --tls -u redis://default:AbjPAAIncDJlOWJmZTgzMWRiZmI0NGM1OGM1MDEyNmY4ZWYxZDVlNnAyNDczMTE@elegant-mallard-47311.upstash.io:6379")
+	
+	if redisUrl != "" {
+		// Connect to the secure cloud database (Upstash)
+		opt, err := redis.ParseURL(redisUrl)
+		if err != nil { log.Fatal("Invalid Redis URL:", err) }
+		rdb = redis.NewClient(opt)
+	} else {
+		// Fallback to local development
+		rdb = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	}
 
-	rdb = redis.NewClient(&redis.Options{Addr: redisAddr})
 	if _, err := rdb.Ping(ctx).Result(); err != nil { log.Fatal("Redis Error:", err) }
-	log.Println("✅ Redis connected to:", redisAddr)
+	log.Println("✅ Redis connected successfully!")
 }
 
 
